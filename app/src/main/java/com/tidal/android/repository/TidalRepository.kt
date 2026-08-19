@@ -4,34 +4,61 @@ import com.tidal.android.model.Album
 import com.tidal.android.model.Artist
 import com.tidal.android.model.Track
 import com.tidal.android.service.TidalService
+import com.tidal.android.util.Result
 
 class TidalRepository(private val tidalService: TidalService) {
 
-    suspend fun searchArtists(query: String): List<Artist> {
-        return tidalService.searchArtists(query)
+    suspend fun searchTracks(query: String): Result<List<Track>> {
+        return try {
+            val tracks = tidalService.searchTracks(query)
+            Result.Success(tracks)
+        } catch (e: Exception) {
+            Result.Error(e as Exception)
+        }
     }
 
-    suspend fun searchAlbums(query: String): List<Album> {
-        return tidalService.searchAlbums(query)
+    suspend fun searchArtists(query: String): Result<List<Artist>> {
+        return try {
+            val artists = tidalService.searchArtists(query)
+            Result.Success(artists)
+        } catch (e: Exception) {
+            Result.Error(e as Exception)
+        }
     }
 
-    suspend fun searchTracks(query: String): List<Track> {
-        return tidalService.searchTracks(query)
+    suspend fun searchAlbums(query: String): Result<List<Album>> {
+        return try {
+            val albums = tidalService.searchAlbums(query)
+            Result.Success(albums)
+        } catch (e: Exception) {
+            Result.Error(e as Exception)
+        }
     }
 
-    suspend fun getAlbumsByArtist(artistId: String): List<Album> {
-        return tidalService.getAlbumsByArtist(artistId)
+    suspend fun getAlbumsByArtist(artistId: String): Result<List<Album>> {
+        return try {
+            val albums = tidalService.getAlbumsByArtist(artistId)
+            Result.Success(albums)
+        } catch (e: Exception) {
+            Result.Error(e as Exception)
+        }
     }
 
-    suspend fun getTracksFromAlbum(albumId: String): List<Track> {
-        return tidalService.getTracksFromAlbum(albumId)
+    suspend fun getTracksFromAlbum(albumId: String): Result<List<Track>> {
+        return try {
+            val tracks = tidalService.getTracksFromAlbum(albumId)
+            Result.Success(tracks)
+        } catch (e: Exception) {
+            Result.Error(e as Exception)
+        }
     }
 
-    suspend fun getTrackStreamUrl(trackId: String): String {
-        return tidalService.getTrackStreamUrl(trackId)
-    }
-
-    suspend fun logout(): Boolean {
-        return tidalService.logout()
+    suspend fun getTrackStreamUrl(trackId: String): Result<String> {
+        return try {
+            val url = tidalService.getTrackStreamUrl(trackId)
+            Result.Success(url)
+        } catch (e: Exception) {
+            Result.Error(e as Exception)
+        }
     }
 }

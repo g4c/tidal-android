@@ -7,53 +7,45 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.tidal.android.download.DownloadTask
 import com.tidal.android.download.TidalDownloadManager
-import com.tidal.android.model.Track
 import kotlinx.coroutines.launch
 
-class DownloadsViewModel(private val downloadManager: TidalDownloadManager) : ViewModel() {
+class DownloadsViewModel(
+    private val downloadManager: TidalDownloadManager
+) : ViewModel() {
 
-    private val _activeDownloads = MutableLiveData<List<DownloadTask>>()
+    private val _activeDownloads = MutableLiveData<List<DownloadTask>>(emptyList())
     val activeDownloads: LiveData<List<DownloadTask>> = _activeDownloads
 
-    private val _downloadProgress = MutableLiveData<Map<String, Int>>()
-    val downloadProgress: LiveData<Map<String, Int>> = _downloadProgress
-
     init {
+        observeDownloads()
+    }
+
+    private fun observeDownloads() {
         viewModelScope.launch {
-            downloadManager.getActiveDownloads().collect {
-                _activeDownloads.value = it
+            downloadManager.getActiveDownloads().collect { downloads ->
+                _activeDownloads.value = downloads
             }
         }
     }
 
-    fun startDownloads(tracks: List<Track>) {
-        viewModelScope.launch {
-            downloadManager.downloadTracks(tracks)
-        }
-    }
-
-    fun cancelDownload(trackId: String) {
-        viewModelScope.launch {
-            downloadManager.cancelDownload(trackId)
-        }
-    }
-
-    fun pauseDownloads() {
+    suspend fun pauseDownloads() {
         downloadManager.pauseDownloads()
     }
 
-    fun resumeDownloads() {
+    suspend fun resumeDownloads() {
         downloadManager.resumeDownloads()
+    }
+
+    suspend fun cancelDownload(taskId: String) {
+        downloadManager.cancelDownload(taskId)
     }
 }
 
-class DownloadsViewModelFactory(private val downloadManager: TidalDownloadManager) :
-    ViewModelProvider.Factory {
+class DownloadsViewModelFactory(
+    private val downloadManager: TidalDownloadManager
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(DownloadsViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return DownloadsViewModel(downloadManager) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
+        @Suppress("UNCHECKED_CAST")
+        return DownloadsViewModel(downloadManager) as T
     }
 }
