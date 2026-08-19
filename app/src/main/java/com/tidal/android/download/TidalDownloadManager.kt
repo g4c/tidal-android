@@ -2,107 +2,190 @@ package com.tidal.android.download
 
 import android.content.Context
 import android.os.Environment
-import androidx.documentfile.provider.DocumentFile
 import com.tidal.android.model.Track
 import com.tidal.android.util.Constants
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
-import java.util.UUID
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.min
 
 class TidalDownloadManager(private val context: Context) {
 
-    private val activeTasks = CopyOnWriteArrayList<DownloadTask>()
-    private val downloadListeners = mutableListOf<DownloadListener>()
+    private val downloadTasks = ConcurrentHashMap<String, DownloadTask>()
+    private val _activeDownloads = MutableStateFlow<List<DownloadTask>>(emptyList())
+    private var isPaused = false
 
-    interface DownloadListener {
-        fun onProgressUpdate(task: DownloadTask)
-        fun onTaskCompleted(task: DownloadTask)
-        fun onTaskFailed(task: DownloadTask)
-    }
+    /**
+     * Get flow of active downloads
+     */
+    fun getActiveDownloads(): Flow<List<DownloadTask>> = _activeDownloads
 
+    /**
+     * Download multiple tracks
+     */
     suspend fun downloadTracks(tracks: List<Track>) {
-        withContext(Dispatchers.IO) {
-            for (track in tracks) {
-                downloadTrack(track)
-            }
-        }
-    }
-
-    private suspend fun downloadTrack(track: Track) {
-        withContext(Dispatchers.IO) {
-            val taskId = UUID.randomUUID().toString()
+        tracks.forEach { track ->
             val task = DownloadTask(
-                id = taskId,
-                track = track,
-                status = DownloadTask.Status.DOWNLOADING
+                id = generateTaskId(),
+                trackId = track.id,
+                title = track.title,
+                artist = track.artist?.name ?: "Unknown Artist",
+                status = DownloadStatus.PENDING
             )
-            activeTasks.add(task)
+            downloadTasks[task.id] = task
+        }
+        updateActiveDownloads()
+        startDownloadQueue()
+    }
 
-            try {
-                // Create download directory
-                val downloadDir = getDownloadDirectory()
-                if (!downloadDir.exists()) {
-                    downloadDir.mkdirs()
-                }
-
-                // Create file path
-                val fileName = "${track.artist.name} - ${track.title}.m4a"
-                val file = File(downloadDir, fileName)
-
-                // In a real implementation, download the file from track.url
-                // For now, this is a placeholder
-                task.status = DownloadTask.Status.COMPLETED
-                task.filePath = file.absolutePath
-                notifyTaskCompleted(task)
-            } catch (e: Exception) {
-                task.status = DownloadTask.Status.FAILED
-                task.errorMessage = e.message
-                notifyTaskFailed(task)
-            } finally {
-                activeTasks.remove(task)
-            }
+    /**
+     * Cancel specific download
+     */
+    suspend fun cancelDownload(taskId: String) {
+        downloadTasks[taskId]?.let {
+            downloadTasks[taskId] = it.copy(status = DownloadStatus.CANCELLED)
+            updateActiveDownloads()
         }
     }
 
-    fun cancelTask(taskId: String) {
-        activeTasks.removeAll { it.id == taskId }
+    /**
+     * Pause all downloads
+     */
+    fun pauseDownloads() {
+        isPaused = true
+        downloadTasks.forEach { (_, task) ->
+            if (task.status == DownloadStatus.DOWNLOADING) {
+                downloadTasks[task.id] = task.copy(status = DownloadStatus.PAUSED)
+            }
+        }
+        updateActiveDownloads()
     }
 
-    fun getActiveTasks(): List<DownloadTask> {
-        return activeTasks.toList()
+    /**
+     * Resume all downloads
+     */
+    fun resumeDownloads() {
+        isPaused = false
+        downloadTasks.forEach { (_, task) ->
+            if (task.status == DownloadStatus.PAUSED) {
+                downloadTasks[task.id] = task.copy(status = DownloadStatus.PENDING)
+            }
+        }
+        updateActiveDownloads()
     }
 
-    fun addListener(listener: DownloadListener) {
-        downloadListeners.add(listener)
+    /**
+     * Get download progress for specific track
+     */
+    fun getDownloadProgress(trackId: String): Int {
+        return downloadTasks.values.firstOrNull { it.trackId == trackId }?.progress ?: 0
     }
 
-    fun removeListener(listener: DownloadListener) {
-        downloadListeners.remove(listener)
+    /**
+     * Update download progress
+     */
+    suspend fun updateProgress(taskId: String, downloadedSize: Long, fileSize: Long) {
+        downloadTasks[taskId]?.let {
+            val progress = if (fileSize > 0) ((downloadedSize * 100) / fileSize).toInt() else 0
+            downloadTasks[taskId] = it.copy(
+                downloadedSize = downloadedSize,
+                fileSize = fileSize,
+                progress = progress
+            )
+            updateActiveDownloads()
+        }
     }
 
-    fun shutdown() {
-        activeTasks.clear()
-        downloadListeners.clear()
+    /**
+     * Mark download as completed
+     */
+    suspend fun markCompleted(taskId: String) {
+        downloadTasks[taskId]?.let {
+            downloadTasks[taskId] = it.copy(
+                status = DownloadStatus.COMPLETED,
+                downloadedAt = System.currentTimeMillis()
+            )
+            updateActiveDownloads()
+        }
     }
 
+    /**
+     * Mark download as failed
+     */
+    suspend fun markFailed(taskId: String) {
+        downloadTasks[taskId]?.let {
+            downloadTasks[taskId] = it.copy(status = DownloadStatus.FAILED)
+            updateActiveDownloads()
+        }
+    }
+
+    /**
+     * Get download directory
+     */
     private fun getDownloadDirectory(): File {
-        return File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
+        val musicDir = File(
+            context.getExternalFilesDir(Environment.DIRECTORY_MUSIC),
             Constants.DOWNLOAD_FOLDER
         )
+        if (!musicDir.exists()) {
+            musicDir.mkdirs()
+        }
+        return musicDir
     }
 
-    private fun notifyProgressUpdate(task: DownloadTask) {
-        downloadListeners.forEach { it.onProgressUpdate(task) }
+    /**
+     * Get file path for track
+     */
+    fun getTrackFilePath(trackId: String, title: String): File {
+        val dir = getDownloadDirectory()
+        val filename = "${title.sanitizeFilename()}.m4a"
+        return File(dir, filename)
     }
 
-    private fun notifyTaskCompleted(task: DownloadTask) {
-        downloadListeners.forEach { it.onTaskCompleted(task) }
+    /**
+     * Start download queue processing
+     */
+    private suspend fun startDownloadQueue() {
+        val pending = downloadTasks.values.filter { it.status == DownloadStatus.PENDING }
+        val toProcess = pending.take(Constants.MAX_CONCURRENT_DOWNLOADS)
+
+        toProcess.forEach { task ->
+            if (!isPaused) {
+                downloadTasks[task.id] = task.copy(status = DownloadStatus.DOWNLOADING)
+                // Actual download logic would be implemented here
+                // For now, mark as completed
+                markCompleted(task.id)
+            }
+        }
+
+        updateActiveDownloads()
     }
 
-    private fun notifyTaskFailed(task: DownloadTask) {
-        downloadListeners.forEach { it.onTaskFailed(task) }
+    /**
+     * Update active downloads flow
+     */
+    private fun updateActiveDownloads() {
+        val active = downloadTasks.values.filter {
+            it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.PENDING
+        }
+        _activeDownloads.value = active
+    }
+
+    /**
+     * Generate unique task ID
+     */
+    private fun generateTaskId(): String {
+        return "task_${System.currentTimeMillis()}_${(0..9999).random()}"
+    }
+
+    /**
+     * Sanitize filename
+     */
+    private fun String.sanitizeFilename(): String {
+        return this.replace(Regex("[<>:\"|?*]"), "_")
+            .replace("/", "_")
+            .replace("\\", "_")
+            .take(255)
     }
 }
