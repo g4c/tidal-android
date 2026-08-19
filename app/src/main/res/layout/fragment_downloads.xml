@@ -2,35 +2,29 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:padding="@dimen/default_padding">
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/status_textview"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="@dimen/default_padding"
-        android:gravity="center_vertical">
-
-        <Button
-            android:id="@+id/start_downloads_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/download_selected"
-            android:layout_marginEnd="@dimen/small_padding" />
-
-        <TextView
-            android:id="@+id/status_textview"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/queue_empty" />
-
-    </LinearLayout>
+        android:text="@string/no_active_downloads"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:layout_marginBottom="@dimen/default_padding" />
 
     <ListView
         android:id="@+id/downloads_listview"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginBottom="@dimen/default_padding" />
+
+    <Button
+        android:id="@+id/start_downloads_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/start_downloads" />
 
 </LinearLayout>
