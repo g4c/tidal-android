@@ -4,104 +4,90 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.ListView
-import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.ViewModelProvider
-import com.tidal.android.R
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.tidal.android.TidalApplication
-import com.tidal.android.download.DownloadTask
-import com.tidal.android.model.Track
-import com.tidal.android.util.Result
+import com.tidal.android.databinding.FragmentDownloadsBinding
+import com.tidal.android.ui.downloads.adapter.DownloadsAdapter
+import kotlinx.coroutines.launch
 
 class DownloadsFragment : Fragment() {
 
-    private lateinit var viewModel: DownloadsViewModel
-    private lateinit var downloadsListView: ListView
-    private lateinit var startDownloadsButton: Button
-    private lateinit var statusTextView: TextView
-
-    private var downloadsAdapter: DownloadsAdapter? = null
+    private lateinit var binding: FragmentDownloadsBinding
+    private val viewModel: DownloadsViewModel by viewModels {
+        DownloadsViewModelFactory(TidalApplication.downloadManager)
+    }
+    private lateinit var adapter: DownloadsAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_downloads, container, false)
+    ): View {
+        binding = FragmentDownloadsBinding.inflate(inflater, container, false)
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        setupRecyclerView()
+        setupControlButtons()
+        observeDownloads()
+    }
 
-        // Initialize views
-        downloadsListView = view.findViewById(R.id.downloads_listview)
-        startDownloadsButton = view.findViewById(R.id.start_downloads_button)
-        statusTextView = view.findViewById(R.id.status_textview)
-
-        // Setup ViewModel factory
-        val factory = DownloadsViewModelFactory(TidalApplication.downloadManager)
-        viewModel = ViewModelProvider(this, factory).get(DownloadsViewModel::class.java)
-
-        // Setup downloads adapter
-        downloadsAdapter = DownloadsAdapter(requireContext(), mutableListOf())
-        downloadsListView.adapter = downloadsAdapter
-
-        // Observe active tasks
-        viewModel.activeTasks.observe(viewLifecycleOwner) { tasks ->
-            downloadsAdapter?.clear()
-            downloadsAdapter?.addAll(tasks)
-            downloadsAdapter?.notifyDataSetChanged()
-
-            // Update status
-            statusTextView.text = when {
-                tasks.isEmpty() -> "No active downloads"
-                else -> "${tasks.size} download(s) in progress"
-            }
-        }
-
-        // Observe download progress
-        viewModel.downloadProgress.observe(viewLifecycleOwner) { result ->
-            when (result) {
-                is Result.Loading -> {
-                    startDownloadsButton.isEnabled = false
-                }
-                is Result.Success -> {
-                    startDownloadsButton.isEnabled = true
-                    Toast.makeText(requireContext(), "Downloads started", Toast.LENGTH_SHORT)
-                        .show()
-                    viewModel.updateActiveTasksList()
-                }
-                is Result.Error -> {
-                    startDownloadsButton.isEnabled = true
-                    Toast.makeText(
-                        requireContext(),
-                        "Error: ${result.exception.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-        }
-
-        // Start downloads button click listener
-        startDownloadsButton.setOnClickListener {
-            // Get queue from search fragment (would need to pass data between fragments)
-            // For now, just show a message
-            Toast.makeText(requireContext(), "Start downloads from queue", Toast.LENGTH_SHORT)
-                .show()
-        }
-
-        // Download item long click to cancel
-        downloadsListView.setOnItemLongClickListener { _, _, position, _ ->
-            val task = downloadsAdapter?.getItem(position) as? DownloadTask
-            if (task != null) {
-                viewModel.cancelDownload(task.id)
+    private fun setupRecyclerView() {
+        adapter = DownloadsAdapter { taskId ->
+            lifecycleScope.launch {
+                viewModel.cancelDownload(taskId)
                 Toast.makeText(requireContext(), "Download cancelled", Toast.LENGTH_SHORT).show()
             }
-            true
         }
+
+        binding.downloadsRecyclerView.apply {
+            layoutManager = LinearLayoutManager(requireContext())
+            adapter = this@DownloadsFragment.adapter
+        }
+    }
+
+    private fun setupControlButtons() {
+        binding.pauseButton.setOnClickListener {
+            viewModel.pauseDownloads()
+            updateButtonStates(isPaused = true)
+            Toast.makeText(requireContext(), "Downloads paused", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.resumeButton.setOnClickListener {
+            viewModel.resumeDownloads()
+            updateButtonStates(isPaused = false)
+            Toast.makeText(requireContext(), "Downloads resumed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun observeDownloads() {
+        viewModel.activeDownloads.observe(viewLifecycleOwner) { downloads ->
+            if (downloads.isEmpty()) {
+                binding.downloadsRecyclerView.visibility = View.GONE
+                binding.emptyStateTextView.visibility = View.VISIBLE
+            } else {
+                binding.downloadsRecyclerView.visibility = View.VISIBLE
+                binding.emptyStateTextView.visibility = View.GONE
+                adapter.submitList(downloads)
+            }
+            updateDownloadStats(downloads)
+        }
+    }
+
+    private fun updateDownloadStats(downloads: List<Any>) {
+        val totalSize = downloads.size
+        val completed = downloads.count { it.toString().contains("COMPLETED") }
+        binding.statsTextView.text = "$completed / $totalSize completed"
+    }
+
+    private fun updateButtonStates(isPaused: Boolean) {
+        binding.pauseButton.isEnabled = !isPaused
+        binding.resumeButton.isEnabled = isPaused
     }
 }
