@@ -7,11 +7,10 @@ import com.tidal.android.model.Artist
 import com.tidal.android.model.Track
 import com.tidal.android.service.TidalService
 import com.tidal.android.service.api.TidalApiClient
-import com.tidal.android.service.auth.AuthRequest
-import com.tidal.android.service.auth.TokenManager
-import com.tidal.android.service.interceptor.AuthInterceptor
+import com.tidal.android.service.auth.OAuth2Manager
 import com.tidal.android.service.interceptor.ErrorHandlingInterceptor
 import com.tidal.android.service.interceptor.LoggingInterceptor
+import com.tidal.android.service.interceptor.TokenRefreshInterceptor
 import com.tidal.android.util.Constants
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -20,13 +19,13 @@ import java.util.concurrent.TimeUnit
 
 class TidalServiceImpl(context: Context) : TidalService {
 
-    private val tokenManager = TokenManager(context)
+    private val oauth2Manager = OAuth2Manager(context)
     private val apiClient: TidalApiClient
 
     init {
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor(LoggingInterceptor())
-            .addInterceptor(AuthInterceptor(tokenManager))
+            .addInterceptor(TokenRefreshInterceptor(oauth2Manager))
             .addInterceptor(ErrorHandlingInterceptor())
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -43,20 +42,13 @@ class TidalServiceImpl(context: Context) : TidalService {
     }
 
     override suspend fun authenticate(username: String, password: String): Boolean {
-        return try {
-            // In real implementation, call actual auth endpoint
-            // val response = apiClient.authenticate(AuthRequest(username, password, TOKEN))
-            // tokenManager.saveAccessToken(response.accessToken)
-            // tokenManager.saveUserId(response.userId)
-            // return true
+        // Not needed for Client Credentials flow
+        // Use acquireAccessToken() instead
+        return false
+    }
 
-            // Mock implementation
-            tokenManager.saveAccessToken("mock_token_${System.currentTimeMillis()}")
-            tokenManager.saveUserId(123)
-            true
-        } catch (e: Exception) {
-            false
-        }
+    suspend fun acquireAccessToken(): Boolean {
+        return oauth2Manager.acquireAccessToken()
     }
 
     override suspend fun searchArtists(query: String): List<Artist> {
@@ -115,7 +107,7 @@ class TidalServiceImpl(context: Context) : TidalService {
 
     override suspend fun logout(): Boolean {
         return try {
-            tokenManager.clearTokens()
+            oauth2Manager.logout()
             true
         } catch (e: Exception) {
             false
