@@ -25,13 +25,26 @@ object Constants {
     // Search Configuration
     const val DEFAULT_SEARCH_LIMIT = 20
     const val MAX_SEARCH_RESULTS = 100
+    const val SEARCH_ENDPOINT = "searchResults" // NEW: Updated to v2 API format
+    const val SEARCH_FILTER_QUERY_PARAM = "filter[query]" // NEW: v2 uses filter-based queries
 
     // API Endpoints
-    const val ENDPOINT_SEARCH = "search/"
+    const val ENDPOINT_SEARCH = "searchResults" // CHANGED: from "search/" to "searchResults"
     const val ENDPOINT_ARTISTS = "artists/"
     const val ENDPOINT_ALBUMS = "albums/"
     const val ENDPOINT_TRACKS = "tracks/"
     const val ENDPOINT_STREAM = "/streamUrl"
+
+    // Hi-Res Audio Configuration
+    const val ALBUM_PROBE_MAX_RETRIES = 3
+    const val ALBUM_PROBE_RETRY_DELAY_MS = 1000L
+    const val RATE_LIMIT_RETRY_CODE = 429
+
+    // Quality Modes
+    const val QUALITY_LOW = "LOW"
+    const val QUALITY_NORMAL = "HIGH"
+    const val QUALITY_LOSSLESS = "LOSSLESS"
+    const val QUALITY_HI_RES = "HI_RES"
 
     // Error Messages
     const val ERROR_NO_INTERNET = "No internet connection"
@@ -39,6 +52,7 @@ object Constants {
     const val ERROR_SEARCH_FAILED = "Search failed"
     const val ERROR_DOWNLOAD_FAILED = "Download failed"
     const val ERROR_PERMISSION_DENIED = "Permission denied"
+    const val ERROR_RATE_LIMITED = "Rate limited, please try again later"
 
     // Preferences
     const val PREF_NAME = "tidal_preferences"
@@ -47,4 +61,6 @@ object Constants {
     const val PREF_TOKEN_EXPIRY = "token_expiry"
     const val PREF_USER_ID = "user_id"
     const val PREF_USERNAME = "username"
+    const val PREF_DOWNLOAD_QUALITY = "download_quality"
+    const val PREF_HI_RES_ENABLED = "hi_res_enabled"
 }

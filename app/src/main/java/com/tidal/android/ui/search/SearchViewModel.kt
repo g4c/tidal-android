@@ -5,7 +5,9 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.tidal.android.download.DownloadQualityManager
 import com.tidal.android.download.TidalDownloadManager
+import com.tidal.android.model.QualityMode
 import com.tidal.android.model.Track
 import com.tidal.android.repository.TidalRepository
 import com.tidal.android.util.Result
@@ -13,7 +15,8 @@ import kotlinx.coroutines.launch
 
 class SearchViewModel(
     private val repository: TidalRepository,
-    private val downloadManager: TidalDownloadManager? = null
+    private val downloadManager: TidalDownloadManager? = null,
+    private val qualityManager: DownloadQualityManager? = null
 ) : ViewModel() {
 
     private val _searchResults = MutableLiveData<Result<List<Any>>>()
@@ -21,6 +24,9 @@ class SearchViewModel(
 
     private val _queue = MutableLiveData<List<Track>>(emptyList())
     val queue: LiveData<List<Track>> = _queue
+
+    private val _selectedQuality = MutableLiveData<QualityMode>(QualityMode.NORMAL)
+    val selectedQuality: LiveData<QualityMode> = _selectedQuality
 
     fun searchTracks(query: String) {
         _searchResults.value = Result.Loading()
@@ -58,10 +64,22 @@ class SearchViewModel(
         }
     }
 
-    suspend fun addToQueue(track: Track) {
+    fun setDownloadQuality(quality: QualityMode) {
+        _selectedQuality.value = quality
+        qualityManager?.saveSelectedQuality(quality)
+    }
+
+    suspend fun addToQueueWithQuality(track: Track, quality: QualityMode) {
         val currentQueue = _queue.value ?: emptyList()
         _queue.value = currentQueue + track
-        downloadManager?.downloadTracks(listOf(track))
+        downloadManager?.downloadTracks(
+            listOf(track),
+            quality = quality
+        )
+    }
+
+    suspend fun addToQueue(track: Track) {
+        addToQueueWithQuality(track, _selectedQuality.value ?: QualityMode.NORMAL)
     }
 }
 

@@ -4,25 +4,25 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.tidal.android.TidalApplication
+import androidx.lifecycle.ViewModelProvider
 import com.tidal.android.databinding.FragmentSearchBinding
-import com.tidal.android.ui.search.adapter.SearchAdapter
-import com.tidal.android.util.Result
-import kotlinx.coroutines.launch
+import com.tidal.android.model.QualityMode
+import com.tidal.android.model.Track
+import com.tidal.android.service.impl.TidalServiceImpl
+import com.tidal.android.download.TidalDownloadManager
+import com.tidal.android.repository.TidalRepository
+import com.tidal.android.ui.search.adapter.SearchResultsAdapter
 
 class SearchFragment : Fragment() {
 
     private lateinit var binding: FragmentSearchBinding
-    private val viewModel: SearchViewModel by viewModels {
-        SearchViewModelFactory(TidalApplication.repository)
-    }
-    private lateinit var adapter: SearchAdapter
+    private lateinit var viewModel: SearchViewModel
+    private lateinit var searchAdapter: SearchResultsAdapter
+    private var selectedQuality: QualityMode = QualityMode.NORMAL
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -30,92 +30,88 @@ class SearchFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         binding = FragmentSearchBinding.inflate(inflater, container, false)
+
+        // Initialize ViewModel
+        val tidalService = TidalServiceImpl(requireContext())
+        val repository = TidalRepository(tidalService)
+        val downloadManager = TidalDownloadManager(requireContext())
+        val viewModelFactory = SearchViewModelFactory(repository)
+        viewModel = ViewModelProvider(this, viewModelFactory).get(SearchViewModel::class.java)
+
+        // Setup quality selector
+        setupQualitySelector()
+
+        // Setup search results adapter
+        searchAdapter = SearchResultsAdapter { track ->
+            onTrackSelected(track)
+        }
+        binding.searchResultsRecyclerView.adapter = searchAdapter
+
+        // Setup search
+        binding.searchButton.setOnClickListener {
+            val query = binding.searchInput.text.toString().trim()
+            if (query.isNotEmpty()) {
+                viewModel.searchTracks(query)
+            }
+        }
+
+        // Observe search results
+        viewModel.searchResults.observe(viewLifecycleOwner) { result ->
+            when (result) {
+                is com.tidal.android.util.Result.Success -> {
+                    val tracks = result.data.filterIsInstance<Track>()
+                    searchAdapter.submitList(tracks)
+                }
+                is com.tidal.android.util.Result.Error -> {
+                    // Show error
+                }
+                is com.tidal.android.util.Result.Loading -> {
+                    // Show loading
+                }
+            }
+        }
+
         return binding.root
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        setupRecyclerView()
-        setupSearchView()
-        observeSearchResults()
-    }
-
-    private fun setupRecyclerView() {
-        adapter = SearchAdapter { track ->
-            lifecycleScope.launch {
-                viewModel.addToQueue(track)
-                showAddedToQueueDialog(track.title)
-            }
-        }
-
-        binding.searchResultsRecyclerView.apply {
-            layoutManager = LinearLayoutManager(requireContext())
-            adapter = this@SearchFragment.adapter
-        }
-    }
-
-    private fun setupSearchView() {
-        binding.searchView.setOnQueryTextListener(
-            object : com.google.android.material.searchview.MaterialSearchView.OnQueryTextListener {
-                override fun onQueryTextSubmit(query: String?): Boolean {
-                    if (query != null && query.isNotEmpty()) {
-                        performSearch(query)
-                    }
-                    return true
-                }
-
-                override fun onQueryTextChange(newText: String?): Boolean {
-                    return false
-                }
-            }
+    private fun setupQualitySelector() {
+        val qualities = listOf(
+            QualityMode.NORMAL,
+            QualityMode.LOSSLESS,
+            QualityMode.HI_RES
         )
-    }
 
-    private fun performSearch(query: String) {
-        lifecycleScope.launch {
-            when (binding.searchTypeGroup.checkedButtonId) {
-                binding.searchTracksButton.id -> viewModel.searchTracks(query)
-                binding.searchArtistsButton.id -> viewModel.searchArtists(query)
-                binding.searchAlbumsButton.id -> viewModel.searchAlbums(query)
-                else -> viewModel.searchTracks(query)
+        val adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_item,
+            qualities.map { it.displayName }
+        )
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+
+        binding.qualitySpinner.adapter = adapter
+        binding.qualitySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                selectedQuality = qualities[position]
+                viewModel.setDownloadQuality(selectedQuality)
             }
+
+            override fun onNothingSelected(parent: AdapterView<*>) {}
         }
     }
 
-    private fun observeSearchResults() {
-        viewModel.searchResults.observe(viewLifecycleOwner) { result ->
-            when (result) {
-                is Result.Loading -> {
-                    binding.progressBar.visibility = View.VISIBLE
-                    binding.searchResultsRecyclerView.visibility = View.GONE
-                }
-                is Result.Success -> {
-                    binding.progressBar.visibility = View.GONE
-                    binding.searchResultsRecyclerView.visibility = View.VISIBLE
-                    adapter.submitList(result.data)
-                }
-                is Result.Error -> {
-                    binding.progressBar.visibility = View.GONE
-                    binding.searchResultsRecyclerView.visibility = View.GONE
-                    showErrorDialog(result.exception.message ?: "Unknown error")
-                }
-            }
+    private fun onTrackSelected(track: Track) {
+        // Show Hi-Res marker if available
+        val hiResMarker = track.getHiResMarker()
+        if (hiResMarker.isNotEmpty()) {
+            // Display HiRes badge to user
         }
-    }
 
-    private fun showAddedToQueueDialog(trackTitle: String) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Added to Queue")
-            .setMessage("'$trackTitle' has been added to your download queue")
-            .setPositiveButton("OK", null)
-            .show()
-    }
-
-    private fun showErrorDialog(message: String) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Search Error")
-            .setMessage(message)
-            .setPositiveButton("Retry", null)
-            .show()
+        // Add to queue with selected quality
+        viewModel.addToQueueWithQuality(track, selectedQuality)
     }
 }

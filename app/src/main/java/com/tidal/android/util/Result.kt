@@ -1,7 +1,9 @@
 package com.tidal.android.util
 
-sealed class Result<out T> {
+import java.io.Serializable
+
+sealed class Result<T> : Serializable {
     data class Success<T>(val data: T) : Result<T>()
-    data class Error(val exception: Exception) : Result<Nothing>()
-    object Loading : Result<Nothing>()
+    data class Error<T>(val exception: Exception) : Result<T>()
+    class Loading<T> : Result<T>()
 }

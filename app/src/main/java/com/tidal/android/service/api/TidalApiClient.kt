@@ -1,59 +1,98 @@
 package com.tidal.android.service.api
 
-import com.tidal.android.model.Album
-import com.tidal.android.model.Artist
-import com.tidal.android.model.Track
-import retrofit2.http.GET
-import retrofit2.http.Path
-import retrofit2.http.Query
+import com.tidal.android.model.*
+import retrofit2.http.*
 
 interface TidalApiClient {
 
-    @GET("search/artists")
+    // Search endpoints - NEW API v2 format with filter-based queries
+    @GET("searchResults")
+    suspend fun searchTracks(
+        @Query("filter[query]") query: String,
+        @Query("limit") limit: Int = 20,
+        @Query("include") include: String = "tracks,artists,albums"
+    ): SearchResponse<Track>
+
+    @GET("searchResults")
     suspend fun searchArtists(
-        @Query("query") query: String,
-        @Query("limit") limit: Int = 20
+        @Query("filter[query]") query: String,
+        @Query("limit") limit: Int = 20,
+        @Query("include") include: String = "artists"
     ): SearchResponse<Artist>
 
-    @GET("search/albums")
+    @GET("searchResults")
     suspend fun searchAlbums(
-        @Query("query") query: String,
-        @Query("limit") limit: Int = 20
+        @Query("filter[query]") query: String,
+        @Query("limit") limit: Int = 20,
+        @Query("include") include: String = "albums"
     ): SearchResponse<Album>
 
-    @GET("search/tracks")
-    suspend fun searchTracks(
-        @Query("query") query: String,
-        @Query("limit") limit: Int = 20
-    ): SearchResponse<Track>
-
-    @GET("artists/{id}/albums")
+    // Artist endpoints
+    @GET("artists/{artistId}/albums")
     suspend fun getAlbumsByArtist(
-        @Path("id") artistId: String,
-        @Query("limit") limit: Int = 50
-    ): SearchResponse<Album>
+        @Path("artistId") artistId: String
+    ): AlbumResponse
 
-    @GET("albums/{id}/tracks")
+    // Album endpoints
+    @GET("albums/{albumId}/tracks")
     suspend fun getTracksFromAlbum(
-        @Path("id") albumId: String,
-        @Query("limit") limit: Int = 100
-    ): SearchResponse<Track>
+        @Path("albumId") albumId: String
+    ): TrackResponse
 
-    @GET("tracks/{id}/streamUrl")
+    // Get album details with quality info
+    @GET("albums/{albumId}")
+    suspend fun getAlbumDetails(
+        @Path("albumId") albumId: String
+    ): AlbumDetailsResponse
+
+    // Stream URL endpoint
+    @GET("tracks/{trackId}/streamUrl")
     suspend fun getTrackStreamUrl(
-        @Path("id") trackId: String
+        @Path("trackId") trackId: String,
+        @Query("quality") quality: String = "HIGH"
+    ): StreamUrlResponse
+
+    // Quality-aware stream endpoint for Hi-Res
+    @GET("tracks/{trackId}/streamUrl")
+    suspend fun getTrackStreamUrlWithQuality(
+        @Path("trackId") trackId: String,
+        @Query("quality") quality: String
     ): StreamUrlResponse
 }
 
+// Response models for JSON:API format
 data class SearchResponse<T>(
-    val items: List<T> = emptyList(),
-    val totalNumberOfItems: Int = 0,
-    val limit: Int = 20,
-    val offset: Int = 0
+    val data: List<T>,
+    val included: List<Any>? = null
+)
+
+data class AlbumResponse(
+    val items: List<Album>
+)
+
+data class TrackResponse(
+    val items: List<Track>
 )
 
 data class StreamUrlResponse(
-    val trackId: String,
-    val soundQuality: String = "HIGH",
-    val urls: List<String> = emptyList()
+    val urls: List<String>,
+    val quality: String? = null,
+    val manifestMimeType: String? = null
+)
+
+data class AlbumDetailsResponse(
+    val id: String,
+    val title: String,
+    val artist: Artist,
+    val audioQuality: String? = null,
+    val audioModes: List<String>? = null,
+    val premiumStreamingOnly: Boolean = false,
+    val numberOfTracks: Int,
+    val duration: Int,
+    val releaseDate: String? = null,
+    val cover: String? = null,
+    val numberOfVolumes: Int = 1,
+    val isHiRes: Boolean = false,
+    val maxBitDepth: Int? = null,
+    val maxSampleRate: Int? = null
 )
