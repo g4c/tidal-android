@@ -1,36 +1,37 @@
 package com.tidal.android.service.interceptor
 
+import android.util.Log
 import com.tidal.android.util.NetworkException
 import okhttp3.Interceptor
 import okhttp3.Response
-import org.json.JSONObject
 
 class ErrorHandlingInterceptor : Interceptor {
-
     override fun intercept(chain: Interceptor.Chain): Response {
-        val response = chain.proceed(chain.request())
+        val request = chain.request()
+        val response = chain.proceed(request)
 
-        if (!response.isSuccessful) {
-            val errorBody = response.body?.string() ?: ""
-            val errorMessage = try {
-                val json = JSONObject(errorBody)
-                json.optString("userMessage", json.optString("message", "Unknown error"))
-            } catch (e: Exception) {
-                "Unknown error"
+        return when {
+            response.code == 401 -> {
+                Log.e("HTTP", "Unauthorized: ${response.message}")
+                throw NetworkException("Unauthorized: Invalid or expired token")
             }
-
-            val exception = when (response.code) {
-                401 -> NetworkException.UnauthorizedException(errorMessage)
-                403 -> NetworkException.ForbiddenException(errorMessage)
-                404 -> NetworkException.NotFoundException(errorMessage)
-                429 -> NetworkException.RateLimitException(errorMessage)
-                500, 502, 503 -> NetworkException.ServerException(errorMessage)
-                else -> NetworkException.HttpException(response.code, errorMessage)
+            response.code == 403 -> {
+                Log.e("HTTP", "Forbidden: ${response.message}")
+                throw NetworkException("Forbidden: Access denied")
             }
-
-            throw exception
+            response.code == 404 -> {
+                Log.e("HTTP", "Not Found: ${response.message}")
+                throw NetworkException("Not Found: Resource not available")
+            }
+            response.code in 500..599 -> {
+                Log.e("HTTP", "Server Error: ${response.code} ${response.message}")
+                throw NetworkException("Server Error: ${response.code}")
+            }
+            !response.isSuccessful -> {
+                Log.e("HTTP", "Request failed: ${response.code} ${response.message}")
+                throw NetworkException("Request failed: ${response.code}")
+            }
+            else -> response
         }
-
-        return response
     }
 }

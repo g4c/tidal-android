@@ -5,32 +5,29 @@ import okhttp3.Interceptor
 import okhttp3.Response
 
 class LoggingInterceptor : Interceptor {
-
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-
         val startTime = System.nanoTime()
+
         Log.d(
-            TAG, String.format(
-                "Sending request %s on %s%n%s",
-                request.url, chain.connection(), request.headers
-            )
+            "HTTP",
+            "Sending request: ${request.url}\nHeaders: ${request.headers}"
         )
 
-        val response = chain.proceed(request)
-        val elapsedTime = (System.nanoTime() - startTime) / 1_000_000.0
+        val response = try {
+            chain.proceed(request)
+        } catch (e: Exception) {
+            Log.e("HTTP", "Request failed: ${e.message}", e)
+            throw e
+        }
 
+        val elapsedTime = (System.nanoTime() - startTime) / 1_000_000.0
         Log.d(
-            TAG, String.format(
-                "Received response for %s in %.1fms%n%s",
-                response.request.url, elapsedTime, response.headers
-            )
+            "HTTP",
+            "Response: ${response.code}\nTime: ${elapsedTime}ms\n" +
+                "Body: ${response.body?.string()}"
         )
 
         return response
-    }
-
-    companion object {
-        private const val TAG = "LoggingInterceptor"
     }
 }

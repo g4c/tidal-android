@@ -9,8 +9,10 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tidal.android.TidalApplication
 import com.tidal.android.databinding.FragmentDownloadsBinding
+import com.tidal.android.download.DownloadStatus
 import com.tidal.android.ui.downloads.adapter.DownloadsAdapter
 import kotlinx.coroutines.launch
 
@@ -21,6 +23,7 @@ class DownloadsFragment : Fragment() {
         DownloadsViewModelFactory(TidalApplication.downloadManager)
     }
     private lateinit var adapter: DownloadsAdapter
+    private var isPaused = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -40,10 +43,7 @@ class DownloadsFragment : Fragment() {
 
     private fun setupRecyclerView() {
         adapter = DownloadsAdapter { taskId ->
-            lifecycleScope.launch {
-                viewModel.cancelDownload(taskId)
-                Toast.makeText(requireContext(), "Download cancelled", Toast.LENGTH_SHORT).show()
-            }
+            showCancelConfirmDialog(taskId)
         }
 
         binding.downloadsRecyclerView.apply {
@@ -54,15 +54,29 @@ class DownloadsFragment : Fragment() {
 
     private fun setupControlButtons() {
         binding.pauseButton.setOnClickListener {
-            viewModel.pauseDownloads()
-            updateButtonStates(isPaused = true)
-            Toast.makeText(requireContext(), "Downloads paused", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch {
+                viewModel.pauseDownloads()
+                isPaused = true
+                updateButtonStates()
+                Toast.makeText(
+                    requireContext(),
+                    "Downloads paused",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
 
         binding.resumeButton.setOnClickListener {
-            viewModel.resumeDownloads()
-            updateButtonStates(isPaused = false)
-            Toast.makeText(requireContext(), "Downloads resumed", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch {
+                viewModel.resumeDownloads()
+                isPaused = false
+                updateButtonStates()
+                Toast.makeText(
+                    requireContext(),
+                    "Downloads resumed",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
     }
 
@@ -82,12 +96,32 @@ class DownloadsFragment : Fragment() {
 
     private fun updateDownloadStats(downloads: List<Any>) {
         val totalSize = downloads.size
-        val completed = downloads.count { it.toString().contains("COMPLETED") }
+        val completed = downloads.count {
+            it.toString().contains(DownloadStatus.COMPLETED.name)
+        }
         binding.statsTextView.text = "$completed / $totalSize completed"
     }
 
-    private fun updateButtonStates(isPaused: Boolean) {
+    private fun updateButtonStates() {
         binding.pauseButton.isEnabled = !isPaused
         binding.resumeButton.isEnabled = isPaused
+    }
+
+    private fun showCancelConfirmDialog(taskId: String) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Cancel Download")
+            .setMessage("Are you sure you want to cancel this download?")
+            .setNegativeButton("No", null)
+            .setPositiveButton("Yes") { _, _ ->
+                lifecycleScope.launch {
+                    viewModel.cancelDownload(taskId)
+                    Toast.makeText(
+                        requireContext(),
+                        "Download cancelled",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            .show()
     }
 }

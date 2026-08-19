@@ -11,60 +11,49 @@ interface TidalApiClient {
 
     @GET("search/artists")
     suspend fun searchArtists(
-        @Query("q") query: String,
+        @Query("query") query: String,
         @Query("limit") limit: Int = 20
     ): SearchResponse<Artist>
 
     @GET("search/albums")
     suspend fun searchAlbums(
-        @Query("q") query: String,
+        @Query("query") query: String,
         @Query("limit") limit: Int = 20
     ): SearchResponse<Album>
 
     @GET("search/tracks")
     suspend fun searchTracks(
-        @Query("q") query: String,
+        @Query("query") query: String,
         @Query("limit") limit: Int = 20
     ): SearchResponse<Track>
 
-    @GET("artists/{artistId}/albums")
+    @GET("artists/{id}/albums")
     suspend fun getAlbumsByArtist(
-        @Path("artistId") artistId: String,
+        @Path("id") artistId: String,
         @Query("limit") limit: Int = 50
-    ): AlbumsResponse
+    ): SearchResponse<Album>
 
-    @GET("albums/{albumId}/tracks")
+    @GET("albums/{id}/tracks")
     suspend fun getTracksFromAlbum(
-        @Path("albumId") albumId: String,
+        @Path("id") albumId: String,
         @Query("limit") limit: Int = 100
-    ): TracksResponse
+    ): SearchResponse<Track>
 
-    @GET("tracks/{trackId}/streamUrl")
+    @GET("tracks/{id}/streamUrl")
     suspend fun getTrackStreamUrl(
-        @Path("trackId") trackId: String
+        @Path("id") trackId: String
     ): StreamUrlResponse
 }
 
 data class SearchResponse<T>(
-    val items: List<T>,
-    val total: Int,
-    val offset: Int,
-    val limit: Int
-)
-
-data class AlbumsResponse(
-    val items: List<Album>,
-    val total: Int
-)
-
-data class TracksResponse(
-    val items: List<Track>,
-    val total: Int
+    val items: List<T> = emptyList(),
+    val totalNumberOfItems: Int = 0,
+    val limit: Int = 20,
+    val offset: Int = 0
 )
 
 data class StreamUrlResponse(
     val trackId: String,
-    val urls: List<String>,
-    val codec: String,
-    val mimeType: String
+    val soundQuality: String = "HIGH",
+    val urls: List<String> = emptyList()
 )

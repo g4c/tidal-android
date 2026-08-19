@@ -7,13 +7,14 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.searchview.MaterialSearchView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tidal.android.TidalApplication
 import com.tidal.android.databinding.FragmentSearchBinding
 import com.tidal.android.ui.search.adapter.SearchAdapter
 import com.tidal.android.util.Result
+import kotlinx.coroutines.launch
 
 class SearchFragment : Fragment() {
 
@@ -41,12 +42,10 @@ class SearchFragment : Fragment() {
 
     private fun setupRecyclerView() {
         adapter = SearchAdapter { track ->
-            viewModel.addToQueue(track)
-            Toast.makeText(
-                requireContext(),
-                "${track.title} added to queue",
-                Toast.LENGTH_SHORT
-            ).show()
+            lifecycleScope.launch {
+                viewModel.addToQueue(track)
+                showAddedToQueueDialog(track.title)
+            }
         }
 
         binding.searchResultsRecyclerView.apply {
@@ -57,7 +56,7 @@ class SearchFragment : Fragment() {
 
     private fun setupSearchView() {
         binding.searchView.setOnQueryTextListener(
-            object : MaterialSearchView.OnQueryTextListener {
+            object : com.google.android.material.searchview.MaterialSearchView.OnQueryTextListener {
                 override fun onQueryTextSubmit(query: String?): Boolean {
                     if (query != null && query.isNotEmpty()) {
                         performSearch(query)
@@ -73,12 +72,13 @@ class SearchFragment : Fragment() {
     }
 
     private fun performSearch(query: String) {
-        // Determine search type based on UI selection or default to tracks
-        when (binding.searchTypeGroup.checkedButtonId) {
-            binding.searchTracksButton.id -> viewModel.searchTracks(query)
-            binding.searchArtistsButton.id -> viewModel.searchArtists(query)
-            binding.searchAlbumsButton.id -> viewModel.searchAlbums(query)
-            else -> viewModel.searchTracks(query)
+        lifecycleScope.launch {
+            when (binding.searchTypeGroup.checkedButtonId) {
+                binding.searchTracksButton.id -> viewModel.searchTracks(query)
+                binding.searchArtistsButton.id -> viewModel.searchArtists(query)
+                binding.searchAlbumsButton.id -> viewModel.searchAlbums(query)
+                else -> viewModel.searchTracks(query)
+            }
         }
     }
 
@@ -97,13 +97,25 @@ class SearchFragment : Fragment() {
                 is Result.Error -> {
                     binding.progressBar.visibility = View.GONE
                     binding.searchResultsRecyclerView.visibility = View.GONE
-                    Toast.makeText(
-                        requireContext(),
-                        "Search failed: ${result.exception.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    showErrorDialog(result.exception.message ?: "Unknown error")
                 }
             }
         }
+    }
+
+    private fun showAddedToQueueDialog(trackTitle: String) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Added to Queue")
+            .setMessage("'$trackTitle' has been added to your download queue")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun showErrorDialog(message: String) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Search Error")
+            .setMessage(message)
+            .setPositiveButton("Retry", null)
+            .show()
     }
 }
